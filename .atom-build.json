@@ -1,0 +1,8 @@
+{
+  "cmd": "go",
+  "name": "go build",
+  "args": [ "build" ],
+  "sh": false,
+  "cwd": "{PROJECT_PATH}",
+  "keymap": "cmd-alt-b"
+}
