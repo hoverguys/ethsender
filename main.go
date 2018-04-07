@@ -7,11 +7,12 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"strings"
 
 	"gopkg.in/cheggaaa/pb.v1"
 )
 
-var address = flag.String("address", "", "Adress of the GameCube that is running ethloader")
+var address = flag.String("address", "", "Address of the GameCube that is running ethloader")
 var payload = flag.String("payload", "", "Payload to send")
 var bufferSize = flag.Uint("buffer", 1024, "Size of package buffer, recommended <= 1024")
 
@@ -19,7 +20,7 @@ func main() {
 	// Read in configuration
 	flag.Parse()
 	if *address == "" {
-		fmt.Println("Please provide a target address: ip:port")
+		fmt.Println("Please provide a target address: ip[:port]")
 		return
 	}
 
@@ -33,6 +34,11 @@ func main() {
 	if err != nil {
 		fmt.Println("Error reading payload")
 		return
+	}
+
+	// Add the default port on the address if not specified
+	if strings.Index(*address, ":") < 0 {
+		*address += ":8856"
 	}
 
 	// Create connection with ethloader on GameCube
