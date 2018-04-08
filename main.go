@@ -23,6 +23,13 @@ func main() {
 
 	// Read in configuration
 	flag.Parse()
+
+	if flag.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "No payload specified")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	if *address == "" {
 		if *nodiscovery {
 			fmt.Fprintln(os.Stderr, "No target address specified")
@@ -30,12 +37,6 @@ func main() {
 			os.Exit(1)
 		}
 		*address = lookupProbe()
-	}
-
-	if flag.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "No payload specified")
-		flag.Usage()
-		os.Exit(1)
 	}
 
 	payload := flag.Arg(0)
