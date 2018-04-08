@@ -36,7 +36,11 @@ func main() {
 			flag.Usage()
 			os.Exit(1)
 		}
-		*address = lookupProbe()
+		var err error
+		*address, err = lookupProbe()
+		checkErr(err, "Could not lookup probe")
+
+		fmt.Fprintf(os.Stderr, "Found GC at %s\n", *address)
 	}
 
 	payload := flag.Arg(0)
@@ -62,16 +66,12 @@ func main() {
 	lengthdata := make([]byte, 4)
 	binary.BigEndian.PutUint32(lengthdata, uint32(filesize))
 	_, err = conn.Write(lengthdata)
-	if err != nil {
-		fmt.Printf("Error write size %s\n", err)
-	}
+	checkErr(err, "Error write size")
 
 	sizedata := make([]byte, 4)
 	binary.BigEndian.PutUint32(sizedata, uint32(*bufferSize))
 	_, err = conn.Write(sizedata)
-	if err != nil {
-		fmt.Printf("Error buffer size %s\n", err)
-	}
+	checkErr(err, "Error buffer size")
 
 	// Setup progressbars
 	bar := pb.New(int(filesize))
@@ -103,23 +103,27 @@ send:
 	bar.FinishPrint("File transferred")
 }
 
-func lookupProbe() string {
-	// Search for gamecube using service discovery probe
-	serverConn, err := net.ListenMulticastUDP("udp", nil, &net.UDPAddr{
-		IP:   net.IPv4(239, 1, 9, 14),
-		Port: 8890,
-	})
+// Search for gamecube using service discovery probe
+func lookupProbe() (string, error) {
+	serverAddr, err := net.ResolveUDPAddr("udp4", "239.1.9.14:8890")
+	checkErr(err, "Error retrieving multicast address")
+
+	serverConn, err := net.ListenMulticastUDP("udp", nil, serverAddr)
 	checkErr(err, "Error listening for probe")
 
-	serverConn.SetReadBuffer(16)
+	serverConn.SetReadBuffer(4)
 
 	fmt.Println("Looking for probe...")
-	buf := make([]byte, 16)
-	n, addr, err := serverConn.ReadFromUDP(buf)
-	checkErr(err, "Error getting probe")
-	fmt.Println("Received ", string(buf[0:n]), " from ", addr)
 
-	return addr.String()
+	for {
+		buf := make([]byte, 4)
+		_, addr, err := serverConn.ReadFromUDP(buf)
+		checkErr(err, "Error getting probe")
+
+		if string(buf) == "BBA\001" {
+			return addr.String(), nil
+		}
+	}
 }
 
 func checkErr(err error, msg string, fmtargs ...interface{}) {
