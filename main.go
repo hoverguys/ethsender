@@ -106,7 +106,7 @@ send:
 func lookupProbe() string {
 	// Search for gamecube using service discovery probe
 	serverConn, err := net.ListenMulticastUDP("udp", nil, &net.UDPAddr{
-		IP:   net.IPv4(234, 1, 9, 14),
+		IP:   net.IPv4(239, 1, 9, 14),
 		Port: 8890,
 	})
 	checkErr(err, "Error listening for probe")
