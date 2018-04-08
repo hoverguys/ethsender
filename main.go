@@ -5,36 +5,44 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
+	"os"
 	"strings"
 
 	"gopkg.in/cheggaaa/pb.v1"
 )
 
-var address = flag.String("address", "", "Address of the GameCube that is running ethloader")
-var payload = flag.String("payload", "", "Payload to send")
-var bufferSize = flag.Uint("buffer", 1024, "Size of package buffer, recommended <= 1024")
-
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [flags] <payload.dol>\n\nFlags:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	var address = flag.String("address", "", "Address of the GameCube that is running ethloader (must be specified if using -nodiscover)")
+	var nodiscovery = flag.Bool("nodiscovery", false, "Disable service discovery")
+	var bufferSize = flag.Uint("buffer", 1024, "Size of package buffer, recommended <= 1024")
+
 	// Read in configuration
 	flag.Parse()
 	if *address == "" {
-		fmt.Println("Please provide a target address: ip[:port]")
-		return
+		if *nodiscovery {
+			fmt.Fprintln(os.Stderr, "No target address specified")
+			flag.Usage()
+			os.Exit(1)
+		}
+		*address = lookupProbe()
 	}
 
-	if *payload == "" {
-		fmt.Println("Please provide a payload: ./path/to/file.dol")
-		return
+	if flag.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "No payload specified")
+		flag.Usage()
+		os.Exit(1)
 	}
+
+	payload := flag.Arg(0)
 
 	// Read DOL into memory
-	data, err := ioutil.ReadFile(*payload)
-	if err != nil {
-		fmt.Println("Error reading payload")
-		return
-	}
+	data, err := ioutil.ReadFile(payload)
+	checkErr(err, "Error reading payload")
 
 	// Add the default port on the address if not specified
 	if strings.Index(*address, ":") < 0 {
@@ -43,10 +51,7 @@ func main() {
 
 	// Create connection with ethloader on GameCube
 	conn, err := net.Dial("tcp4", *address)
-	if err != nil {
-		fmt.Printf("Error dailing address %s\n%s\n", *address, err)
-		return
-	}
+	checkErr(err, "Error dialing address %s", *address)
 	defer conn.Close()
 
 	// Get file size
@@ -83,10 +88,7 @@ send:
 			limit = filesize
 		}
 		written, err := conn.Write(data[totalwritten:limit])
-		if err != nil {
-			log.Printf("Error transferring %s\n", err)
-			return
-		}
+		checkErr(err, "Error trasferring payload")
 		bar.Add(written)
 		totalwritten += int64(written)
 
@@ -98,4 +100,31 @@ send:
 	}
 
 	bar.FinishPrint("File transferred")
+}
+
+func lookupProbe() string {
+	// Search for gamecube using service discovery probe
+	serverConn, err := net.ListenMulticastUDP("udp", nil, &net.UDPAddr{
+		IP:   net.IPv4(234, 1, 9, 14),
+		Port: 8890,
+	})
+	checkErr(err, "Error listening for probe")
+
+	serverConn.SetReadBuffer(16)
+
+	fmt.Println("Looking for probe...")
+	buf := make([]byte, 16)
+	n, addr, err := serverConn.ReadFromUDP(buf)
+	checkErr(err, "Error getting probe")
+	fmt.Println("Received ", string(buf[0:n]), " from ", addr)
+
+	return addr.String()
+}
+
+func checkErr(err error, msg string, fmtargs ...interface{}) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, msg+":\n    ", fmtargs...)
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 }
